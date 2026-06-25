@@ -14,6 +14,9 @@ import android.content.Intent;
 import android.net.Uri;
 import android.telephony.TelephonyManager;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+
+import java.util.Locale;
 
 public class CFCallNumber extends CordovaPlugin {
   public static final int CALL_REQ_CODE = 0;
@@ -78,7 +81,11 @@ public class CFCallNumber extends CordovaPlugin {
       intent.setData(Uri.parse(number));
 
       if ((enableTelephony==false) && bypassAppChooser) {
-        intent.setPackage(getDialerPackage(intent));
+        String dialerPackage = getDialerPackage(intent);
+
+        if (dialerPackage != null && !dialerPackage.isEmpty()) {
+          intent.setPackage(dialerPackage);
+        }
       }
 
       cordova.getActivity().startActivity(intent);
@@ -95,16 +102,22 @@ public class CFCallNumber extends CordovaPlugin {
 
   private String getDialerPackage(Intent intent) {
     PackageManager packageManager = (PackageManager) cordova.getActivity().getPackageManager();
-    List activities = packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+    List<ResolveInfo> activities = packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
 
-    for (int i = 0; i < activities.size(); i++) {
-      if (activities.get(i).toString().toLowerCase().contains("com.android.server.telecom")) {
+    for (ResolveInfo activity : activities) {
+      if (activity.activityInfo == null || activity.activityInfo.packageName == null) {
+        continue;
+      }
+
+      String packageName = activity.activityInfo.packageName.toLowerCase(Locale.ROOT);
+
+      if (packageName.contains("com.android.server.telecom")) {
         return "com.android.server.telecom";
       }
-      if (activities.get(i).toString().toLowerCase().contains("com.android.phone")) {
+      if (packageName.contains("com.android.phone")) {
         return "com.android.phone";
-      } else if (activities.get(i).toString().toLowerCase().contains("call")) {
-        return activities.get(i).toString().split("[ ]")[1].split("[/]")[0];
+      } else if (packageName.contains("call")) {
+        return activity.activityInfo.packageName;
       }
     }
     return "";

@@ -10,30 +10,42 @@
 - (void) callNumber:(CDVInvokedUrlCommand*)command {
     
     [self.commandDelegate runInBackground:^{
-        
-        __block CDVPluginResult* pluginResult = nil;
         NSString* number = [command.arguments objectAtIndex:0];
-        number = [number stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
-        
+        number = [number stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+
         if(![number hasPrefix:@"tel:"]){
             number =  [NSString stringWithFormat:@"tel:%@", number];
         }
 
+        NSURL* phoneURL = [NSURL URLWithString:number];
+
+        if (phoneURL == nil) {
+            CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"CouldNotCallPhoneNumber"];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+            return;
+        }
+
         // run in mainthread as below 
         dispatch_async(dispatch_get_main_queue(), ^{
+            UIApplication* application = [UIApplication sharedApplication];
+            CDVPluginResult* pluginResult = nil;
+
             if(![CFCallNumber available]) {
                 pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"NoFeatureCallSupported"];
+                [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
             }
-            else if(![[UIApplication sharedApplication] openURL:[NSURL URLWithString:number]]) {
-                // missing phone number
+            else if(![application canOpenURL:phoneURL]) {
                 pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"CouldNotCallPhoneNumber"];
+                [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
             } else {
-                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+                [application openURL:phoneURL options:@{} completionHandler:^(BOOL success) {
+                    CDVPluginResult* openResult = success
+                        ? [CDVPluginResult resultWithStatus:CDVCommandStatus_OK]
+                        : [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"CouldNotCallPhoneNumber"];
+                    [self.commandDelegate sendPluginResult:openResult callbackId:command.callbackId];
+                }];
             }
         });
-        // return result
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-        
     }];
 }
 
